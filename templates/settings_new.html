@@ -1,0 +1,403 @@
+{% extends 'base.html' %}
+{% block head %}
+<style>
+    #crop-rect { 
+        border: 2px dashed #3b82f6; 
+        position: absolute; 
+        background: rgba(59,130,246,0.1); 
+        pointer-events: auto;
+        z-index: 5;
+    }
+    .feed-container { 
+        position: relative; 
+        display: inline-block; 
+    }
+    .real-time-indicator {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(34, 197, 94, 0.9);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: bold;
+        z-index: 10;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header Section -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-sliders-h text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">Camera Settings</h1>
+                    <p class="text-gray-600">Configure camera: <span class="font-semibold text-blue-600">{{name}}</span></p>
+                </div>
+            </div>
+            <a href="/" class="flex items-center space-x-2 px-6 py-3 bg-white/50 hover:bg-white/70 rounded-xl border border-white/30 transition-all duration-200 text-gray-700 hover:text-gray-900">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Cameras</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Live Preview Section -->
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+        <!-- Raw Feed -->
+        <div class="glass-effect rounded-2xl overflow-hidden shadow-xl">
+            <div class="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-blue-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-camera text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-blue-800">Raw Camera Feed</h3>
+                            <p class="text-sm text-blue-600">Original video stream</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                        <span class="text-xs text-green-600 font-medium">LIVE</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-black">
+                <div id="raw-feed-container" class="feed-container relative">
+                    <img id="raw-feed" 
+                         src="/feed/{{name}}/stream?raw=1" 
+                         class="w-full h-auto rounded-lg border border-gray-600" 
+                         alt="Raw Camera Feed"/>
+                    <div id="crop-rect"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processed Feed -->
+        <div class="glass-effect rounded-2xl overflow-hidden shadow-xl">
+            <div class="bg-gradient-to-r from-purple-50 to-purple-100 px-6 py-4 border-b border-purple-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-eye text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-purple-800">Processed Feed</h3>
+                            <p class="text-sm text-purple-600">With face detection</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                        <span class="text-xs text-green-600 font-medium">LIVE</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-black">
+                <div id="result-feed-container" class="feed-container relative">
+                    <canvas id="result-canvas" class="w-full h-auto rounded-lg border border-gray-600"></canvas>
+                    <div id="entry-line" style="position:absolute; display:none;"></div>
+                    <div id="exit-line" style="position:absolute; display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Form -->
+    <div class="glass-effect rounded-2xl p-8 shadow-xl">
+        <form method="post" class="space-y-8">
+            <!-- Basic Camera Settings -->
+            <div class="space-y-6">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-camera text-blue-600"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">Basic Camera Settings</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-arrows-alt-h text-blue-500 mr-2"></i>Width
+                        </label>
+                        <input name="width" 
+                               value="{{settings.width|default(640)}}" 
+                               placeholder="640"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-arrows-alt-v text-blue-500 mr-2"></i>Height
+                        </label>
+                        <input name="height" 
+                               value="{{settings.height|default(480)}}" 
+                               placeholder="480"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-tachometer-alt text-green-500 mr-2"></i>FPS
+                        </label>
+                        <input name="fps" 
+                               value="{{settings.fps|default(15)}}" 
+                               type="number" min="1" max="30"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                        <p class="text-xs text-gray-500">Frames per second (1-30)</p>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-compress text-purple-500 mr-2"></i>Quality
+                        </label>
+                        <select name="quality" 
+                                class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70">
+                            <option value="low" {{'selected' if settings.quality == 'low'}}>Low</option>
+                            <option value="medium" {{'selected' if settings.quality == 'medium' or not settings.quality}}>Medium</option>
+                            <option value="high" {{'selected' if settings.quality == 'high'}}>High</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detection Area -->
+            <div class="space-y-6">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-crop text-green-600"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">Detection Area</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-arrows-alt-h text-orange-500 mr-2"></i>Crop X
+                        </label>
+                        <input name="crop_x" 
+                               value="{{settings.crop_x|default(0)}}" 
+                               type="number" min="0"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-arrows-alt-v text-orange-500 mr-2"></i>Crop Y
+                        </label>
+                        <input name="crop_y" 
+                               value="{{settings.crop_y|default(0)}}" 
+                               type="number" min="0"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-expand text-orange-500 mr-2"></i>Crop Width
+                        </label>
+                        <input name="crop_width" 
+                               value="{{settings.crop_width|default(640)}}" 
+                               type="number" min="1"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">
+                            <i class="fas fa-expand-arrows-alt text-orange-500 mr-2"></i>Crop Height
+                        </label>
+                        <input name="crop_height" 
+                               value="{{settings.crop_height|default(480)}}" 
+                               type="number" min="1"
+                               class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 bg-white/70"/>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
+                            <i class="fas fa-info text-blue-600 text-sm"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-blue-800 mb-2">Interactive Crop Selection</h4>
+                            <p class="text-sm text-blue-700">You can drag on the raw feed above to select the detection area. The crop rectangle will show the selected region.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Entry/Exit Lines -->
+            <div class="space-y-6">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-exchange-alt text-purple-600"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">Entry/Exit Detection</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Entry Line -->
+                    <div class="space-y-4">
+                        <h3 class="font-semibold text-green-700 flex items-center">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Entry Line
+                        </h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Start X</label>
+                                <input name="entry_line_x1" 
+                                       value="{{settings.entry_line_x1|default(0)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Start Y</label>
+                                <input name="entry_line_y1" 
+                                       value="{{settings.entry_line_y1|default(0)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">End X</label>
+                                <input name="entry_line_x2" 
+                                       value="{{settings.entry_line_x2|default(100)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">End Y</label>
+                                <input name="entry_line_y2" 
+                                       value="{{settings.entry_line_y2|default(100)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Exit Line -->
+                    <div class="space-y-4">
+                        <h3 class="font-semibold text-red-700 flex items-center">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Exit Line
+                        </h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Start X</label>
+                                <input name="exit_line_x1" 
+                                       value="{{settings.exit_line_x1|default(200)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Start Y</label>
+                                <input name="exit_line_y1" 
+                                       value="{{settings.exit_line_y1|default(0)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">End X</label>
+                                <input name="exit_line_x2" 
+                                       value="{{settings.exit_line_x2|default(300)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">End Y</label>
+                                <input name="exit_line_y2" 
+                                       value="{{settings.exit_line_y2|default(100)}}" 
+                                       type="number"
+                                       class="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all duration-200 bg-white/70"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center space-x-4 pt-6 border-t border-white/20">
+                <button type="submit" 
+                        class="flex-1 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-indigo-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl">
+                    <i class="fas fa-save mr-2"></i>Save Camera Settings
+                </button>
+                
+                <a href="/advanced/{{name}}" 
+                   class="px-8 py-4 bg-purple-100 hover:bg-purple-200 text-purple-700 font-medium rounded-xl transition-all duration-200">
+                    <i class="fas fa-cogs mr-2"></i>Advanced Settings
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Crop rectangle functionality
+let isDrawing = false;
+let startX, startY;
+const cropRect = document.getElementById('crop-rect');
+const rawFeedContainer = document.getElementById('raw-feed-container');
+
+rawFeedContainer.addEventListener('mousedown', function(e) {
+    const rect = rawFeedContainer.getBoundingClientRect();
+    startX = e.clientX - rect.left;
+    startY = e.clientY - rect.top;
+    isDrawing = true;
+    
+    cropRect.style.left = startX + 'px';
+    cropRect.style.top = startY + 'px';
+    cropRect.style.width = '0px';
+    cropRect.style.height = '0px';
+    cropRect.style.display = 'block';
+});
+
+rawFeedContainer.addEventListener('mousemove', function(e) {
+    if (!isDrawing) return;
+    
+    const rect = rawFeedContainer.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    const width = currentX - startX;
+    const height = currentY - startY;
+    
+    cropRect.style.width = Math.abs(width) + 'px';
+    cropRect.style.height = Math.abs(height) + 'px';
+    cropRect.style.left = (width < 0 ? currentX : startX) + 'px';
+    cropRect.style.top = (height < 0 ? currentY : startY) + 'px';
+});
+
+rawFeedContainer.addEventListener('mouseup', function(e) {
+    if (!isDrawing) return;
+    isDrawing = false;
+    
+    // Update form fields with crop values
+    const rect = rawFeedContainer.getBoundingClientRect();
+    const img = document.getElementById('raw-feed');
+    const imgRect = img.getBoundingClientRect();
+    
+    // Calculate scale factors
+    const scaleX = img.naturalWidth / img.offsetWidth;
+    const scaleY = img.naturalHeight / img.offsetHeight;
+    
+    const cropX = Math.max(0, parseInt(cropRect.style.left) * scaleX);
+    const cropY = Math.max(0, parseInt(cropRect.style.top) * scaleY);
+    const cropWidth = parseInt(cropRect.style.width) * scaleX;
+    const cropHeight = parseInt(cropRect.style.height) * scaleY;
+    
+    document.querySelector('input[name="crop_x"]').value = Math.round(cropX);
+    document.querySelector('input[name="crop_y"]').value = Math.round(cropY);
+    document.querySelector('input[name="crop_width"]').value = Math.round(cropWidth);
+    document.querySelector('input[name="crop_height"]').value = Math.round(cropHeight);
+});
+
+// Live feed refresh
+setInterval(() => {
+    const rawFeed = document.getElementById('raw-feed');
+    const timestamp = new Date().getTime();
+    rawFeed.src = `/feed/{{name}}/stream?raw=1&t=${timestamp}`;
+}, 5000);
+</script>
+{% endblock %}

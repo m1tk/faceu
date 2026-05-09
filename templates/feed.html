@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/" class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back to Cameras
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-7 h-7 mr-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        Live Feed: <span class="text-blue-600">{{name}}</span>
+                    </h1>
+                    <p class="text-gray-600">Real-time camera stream with face recognition</p>
+                </div>
+            </div>
+            
+            <!-- Status Indicator -->
+            <div class="flex items-center space-x-2 bg-green-50 text-green-700 px-3 py-2 rounded-lg border border-green-200">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-sm font-medium">LIVE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Feed Container -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-gray-900">Camera Stream</h2>
+                <div class="flex items-center space-x-4 text-sm text-gray-600">
+                    <div class="flex items-center space-x-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Real-time</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Face Detection Active</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            <div class="relative bg-gray-900 rounded-lg overflow-hidden">
+                <img src="/feed/{{name}}/stream" 
+                     class="w-full h-auto max-h-[70vh] object-contain mx-auto block" 
+                     style="background: #1f2937;"
+                     alt="Live camera feed"/>
+                
+                <!-- Overlay Controls (if needed) -->
+                <div class="absolute top-4 right-4 flex space-x-2">
+                    <button class="bg-black bg-opacity-50 text-white p-2 rounded-lg hover:bg-opacity-70 transition-all" 
+                            onclick="toggleFullscreen()"
+                            title="Toggle Fullscreen">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Help Text -->
+            <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div class="flex items-start space-x-3">
+                    <svg class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div>
+                        <h3 class="text-sm font-medium text-blue-900">Troubleshooting</h3>
+                        <p class="text-sm text-blue-700 mt-1">If the feed appears blank, check your camera connection and ensure the camera is not being used by another application.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleFullscreen() {
+    const img = document.querySelector('img');
+    if (!document.fullscreenElement) {
+        img.requestFullscreen().catch(err => {
+            console.log('Error attempting to enable full-screen mode:', err.message);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+}
+</script>
+{% endblock %}

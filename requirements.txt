@@ -1,0 +1,9 @@
+onnxruntime
+numpy
+scipy
+opencv-python
+face_recognition
+python-dotenv
+flask
+mediapipe==0.10.14
+setuptools<81

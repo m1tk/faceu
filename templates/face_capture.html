@@ -1,0 +1,1932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Pose Capture</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: white;
+            min-height: 100vh;
+            padding: 10px;
+            margin: 0;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .app-container {
+            display: flex;
+            gap: 30px;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+        
+        .camera-section {
+            flex: 1;
+            min-width: 500px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .camera-container {
+            position: relative;
+            width: 100%;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            background: #000;
+            aspect-ratio: 16/9;
+        }
+        
+        #camera {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+        
+        .feedback-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .feedback-title {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .pose-feedback {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .pose-indicator {
+            flex: 1;
+            min-width: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .indicator-title {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+        
+        .indicator-value {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .indicator-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .bar-fill {
+            height: 100%;
+            background: #4caf50;
+            width: 50%;
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .instructions h3 {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            flex: 1;
+            min-width: 150px;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(to right, #4a00e0, #8e2de2);
+            color: white;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        #captureBtn {
+            background: linear-gradient(to right, #00b09b, #96c93d);
+        }
+        
+        .captures-section {
+            flex: 1;
+            min-width: 500px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .captures-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .capture-item {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+            position: relative;
+        }
+        
+        .capture-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .capture-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f44336;
+        }
+        
+        .status-dot.active {
+            background: #4caf50;
+            box-shadow: 0 0 10px #4caf50;
+        }
+        
+        .target-pose {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+            color: #ffeb3b;
+            margin-top: 10px;
+        }
+        
+        .progress-container {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, #00b09b, #96c93d);
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+        
+        .quality-indicators {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .quality-indicator {
+            flex: 1;
+            min-width: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .quality-label {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+        
+        .quality-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        
+        .good {
+            color: #4caf50;
+        }
+        
+        .warning {
+            color: #ff9800;
+        }
+        
+        .bad {
+            color: #f44336;
+        }
+        
+        .capture-status {
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 10px 0;
+            background: rgba(0, 0, 0, 0.4);
+        }
+        
+        .capture-good {
+            background: rgba(76, 175, 80, 0.3);
+        }
+        
+        .guidance-arrows {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            filter: drop-shadow(0 0 5px rgba(0,0,0,0.7));
+        }
+
+        .arrow.visible {
+            opacity: 0.9;
+        }
+
+        #arrow-up {
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 0 25px 40px 25px;
+            border-color: transparent transparent #ffc107 transparent;
+        }
+
+        #arrow-down {
+            bottom: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 40px 25px 0 25px;
+            border-color: #ffc107 transparent transparent transparent;
+        }
+
+        #arrow-left {
+            right: 10%;
+            top: 50%;
+            transform: translateY(-50%);
+            border-width: 25px 0 25px 40px;
+            border-color: transparent transparent transparent #ffc107;
+        }
+
+        #arrow-right {
+            left: 10%;
+            top: 50%;
+            transform: translateY(-50%);
+            border-width: 25px 40px 25px 0;
+            border-color: transparent #ffc107 transparent transparent;
+        }
+
+        .target-previews-container {
+            display: flex;
+            gap: 5px;
+            width: 100%;
+            height: 60px;
+            margin-bottom: 5px;
+        }
+
+        .target-preview {
+            flex: 1;
+            background: #333;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: #aaa;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            position: relative;
+        }
+
+        /* New styles for reorganized layout */
+        .phase-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .instructions-phase {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .instructions-phase.hidden {
+            display: none;
+        }
+        
+        .capture-phase {
+            display: none;
+            height: 100vh;
+            max-height: 100vh;
+            overflow: hidden;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        
+        .capture-phase.active {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .capture-layout {
+            display: flex;
+            gap: 10px;
+            height: calc(100vh - 80px);
+            min-height: 500px;
+        }
+        
+        .video-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            min-width: 400px;
+        }
+        
+        .compact-camera-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            border-radius: 15px;
+            overflow: hidden;
+            background: #000;
+            margin-bottom: 10px;
+        }
+        
+        .compact-camera-container #camera,
+        .compact-camera-container #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        .side-panel {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .compact-feedback {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            padding: 12px;
+            flex: 1;
+        }
+        
+        .compact-pose-feedback {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .compact-pose-indicator {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .compact-indicator-title {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-bottom: 3px;
+        }
+        
+        .compact-indicator-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        
+        .compact-indicator-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .capture-targets {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            padding: 12px;
+            flex: 1;
+        }
+        
+        .targets-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .target-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .target-item.current {
+            background: rgba(255, 193, 7, 0.3);
+            border: 2px solid #FFC107;
+        }
+        
+        .target-item.completed {
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid #4CAF50;
+        }
+        
+        .target-preview {
+            width: 100%;
+            height: 60px;
+            background: #333;
+            border-radius: 6px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: #aaa;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            position: relative;
+        }
+        
+        .target-preview.guide-image {
+            color: rgba(255, 255, 255, 0.3); /* Semi-transparent text as fallback */
+            text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+        }
+        
+        .target-preview.captured {
+            border: 2px solid #4CAF50;
+            color: #4CAF50;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+        }
+        
+        /* Fallback styles if images don't load */
+        .target-preview {
+            background-color: #333;
+        }
+        
+        .target-label {
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .compact-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        
+        .compact-controls button {
+            flex: 1;
+            min-width: 100px;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+        }
+        
+        .instructions-content {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        
+        .instruction-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .instruction-section h3 {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .instruction-section ul {
+            padding-left: 20px;
+        }
+        
+        .instruction-section li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .start-button {
+            background: linear-gradient(to right, #4CAF50, #45a049);
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            margin-top: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .capture-layout {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .compact-pose-feedback {
+                grid-template-columns: 1fr;
+            }
+            
+            .targets-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .capture-warning {
+            background: rgba(255, 152, 0, 0.3);
+        }
+        
+        @media (max-width: 1100px) {
+            .app-container {
+                flex-direction: column;
+            }
+            
+            .camera-section, .captures-section {
+                min-width: 100%;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .camera-container {
+                aspect-ratio: 9/16;
+            }
+            
+            .captures-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Instructions Phase -->
+    <div class="phase-container instructions-phase" id="instructionsPhase">
+        <header>
+            <h1>Smart Face Pose Capture</h1>
+            <p class="subtitle">Our system will automatically capture high-quality face images when you position yourself correctly. We'll capture 10 images (2 for each of the 5 required angles) for optimal recognition.</p>
+        </header>
+        
+        <div class="instructions-content">
+            <div class="instruction-section">
+                <h3>📋 What We'll Capture</h3>
+                <p>We'll automatically capture 10 images with different head positions (2 for each angle):</p>
+                <ul>
+                    <li><strong>Frontal Position</strong> - Looking straight ahead (0° Yaw, 0° Pitch)</li>
+                    <li><strong>Left Yaw</strong> - Turn your head moderately left (-20°)</li>
+                    <li><strong>Right Yaw</strong> - Turn your head moderately right (+20°)</li>
+                    <li><strong>Up Pitch</strong> - Tilt your head moderately up (-15°)</li>
+                    <li><strong>Down Pitch</strong> - Tilt your head moderately down (+15°)</li>
+                </ul>
+            </div>
+            
+            <div class="instruction-section">
+                <h3>📝 Capture Instructions</h3>
+                <ul>
+                    <li>Position your face within the camera frame</li>
+                    <li>Keep your eyes open and look directly at the camera</li>
+                    <li>Maintain a neutral expression</li>
+                    <li>Ensure good lighting on your face</li>
+                    <li>Follow the position guidance for each capture</li>
+                    <li>Stay still when the capture countdown begins</li>
+                    <li>The system will automatically detect when you're in the correct position</li>
+                </ul>
+            </div>
+            
+            <div class="instruction-section">
+                <h3>🎯 Tips for Best Results</h3>
+                <ul>
+                    <li>Use good lighting - face the light source if possible</li>
+                    <li>Remove glasses or items that might block your face</li>
+                    <li>Keep your face uncovered (no masks, hands, etc.)</li>
+                    <li>Position yourself about arm's length from the camera</li>
+                    <li>If needed, use the "Calibrate Pose" button to improve accuracy</li>
+                </ul>
+            </div>
+            
+            <div class="instruction-section">
+                <h3>✅ Quality Requirements</h3>
+                <ul>
+                    <li>Face must fill at least 15% of the frame</li>
+                    <li>No significant facial obstructions (glasses are OK)</li>
+                    <li>Good lighting with no harsh shadows</li>
+                    <li>Sharp, in-focus images</li>
+                    <li>Head within ±15° of target position</li>
+                    <li>Keep eyes open and maintain neutral expression</li>
+                </ul>
+            </div>
+        </div>
+        
+        <button id="startBtn" class="start-button">Start Face Capture</button>
+    </div>
+    
+    <!-- Capture Phase -->
+    <div class="phase-container capture-phase" id="capturePhase">
+        <div class="capture-layout">
+            <!-- Video Section -->
+            <div class="video-section">
+                <div class="compact-camera-container">
+                    <video id="camera" autoplay playsinline width="1280" height="720"></video>
+                    <canvas id="canvas" width="1280" height="720"></canvas>
+                    <div class="guidance-arrows">
+                        <div id="arrow-up" class="arrow"></div>
+                        <div id="arrow-down" class="arrow"></div>
+                        <div id="arrow-left" class="arrow"></div>
+                        <div id="arrow-right" class="arrow"></div>
+                    </div>
+                </div>
+                
+                <div class="compact-controls">
+                    <button id="calibrateBtn">Calibrate</button>
+                    <button id="resetBtn">Reset</button>
+                    <button id="backBtn">Back to Instructions</button>
+                </div>
+                <div class="compact-controls">
+                    <button id="submitBtn" disabled>Submit</button>
+                </div>
+            </div>
+            
+            <!-- Side Panel -->
+            <div class="side-panel">
+                <!-- Pose Feedback -->
+                <div class="compact-feedback">
+                    <h4>📊 Head Position</h4>
+                    <div class="compact-pose-feedback">
+                        <div class="compact-pose-indicator">
+                            <div class="compact-indicator-title">Yaw</div>
+                            <div class="compact-indicator-value" id="yawValue">0°</div>
+                            <div class="compact-indicator-bar">
+                                <div class="bar-fill" id="yawBar" style="width: 50%;"></div>
+                            </div>
+                        </div>
+                        <div class="compact-pose-indicator">
+                            <div class="compact-indicator-title">Pitch</div>
+                            <div class="compact-indicator-value" id="pitchValue">0°</div>
+                            <div class="compact-indicator-bar">
+                                <div class="bar-fill" id="pitchBar" style="width: 50%;"></div>
+                            </div>
+                        </div>
+                        <div class="compact-pose-indicator">
+                            <div class="compact-indicator-title">Roll</div>
+                            <div class="compact-indicator-value" id="rollValue">0°</div>
+                            <div class="compact-indicator-bar">
+                                <div class="bar-fill" id="rollBar" style="width: 50%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="target-pose" id="targetPose">
+                        🎯 Target: Frontal Position (0° Yaw, 0° Pitch)
+                    </div>
+                    
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    
+                    <div class="capture-status" id="captureStatus">
+                        Position your face in the frame to begin capture
+                    </div>
+                    
+                    <div class="status-indicator">
+                        <div class="status-dot" id="statusDot"></div>
+                        <div id="statusText">Initializing camera...</div>
+                    </div>
+                </div>
+                
+                <!-- Capture Targets -->
+                <div class="capture-targets">
+                    <h4>📸 Capture Progress</h4>
+                    <div class="targets-grid">
+                        <div class="target-item current" id="target1">
+                            <div class="target-previews-container">
+                                <div class="target-preview guide-image" id="preview1_1" style="background-image: url('/static/frontal.png')"></div>
+                                <div class="target-preview guide-image" id="preview1_2" style="background-image: url('/static/frontal.png')"></div>
+                            </div>
+                            <div class="target-label">Frontal</div>
+                        </div>
+                        <div class="target-item" id="target2">
+                            <div class="target-previews-container">
+                                <div class="target-preview guide-image" id="preview2_1" style="background-image: url('/static/yaw_left.png')"></div>
+                                <div class="target-preview guide-image" id="preview2_2" style="background-image: url('/static/yaw_left.png')"></div>
+                            </div>
+                            <div class="target-label">Left Yaw</div>
+                        </div>
+                        <div class="target-item" id="target3">
+                            <div class="target-previews-container">
+                                <div class="target-preview guide-image" id="preview3_1" style="background-image: url('/static/yaw_right.png')"></div>
+                                <div class="target-preview guide-image" id="preview3_2" style="background-image: url('/static/yaw_right.png')"></div>
+                            </div>
+                            <div class="target-label">Right Yaw</div>
+                        </div>
+                        <div class="target-item" id="target4">
+                            <div class="target-previews-container">
+                                <div class="target-preview guide-image" id="preview4_1" style="background-image: url('/static/pitch_up.png')"></div>
+                                <div class="target-preview guide-image" id="preview4_2" style="background-image: url('/static/pitch_up.png')"></div>
+                            </div>
+                            <div class="target-label">Up Pitch</div>
+                        </div>
+                        <div class="target-item" id="target5">
+                            <div class="target-previews-container">
+                                <div class="target-preview guide-image" id="preview5_1" style="background-image: url('/static/pitch_down.png')"></div>
+                                <div class="target-preview guide-image" id="preview5_2" style="background-image: url('/static/pitch_down.png')"></div>
+                            </div>
+                            <div class="target-label">Down Pitch</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const videoElement = document.getElementById('camera');
+        const canvasElement = document.getElementById('canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const calibrateBtn = document.getElementById('calibrateBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const backBtn = document.getElementById('backBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const targetPose = document.getElementById('targetPose');
+        const progressBar = document.getElementById('progressBar');
+        const captureStatus = document.getElementById('captureStatus');
+        
+        // Guidance arrows
+        const arrowUp = document.getElementById('arrow-up');
+        const arrowDown = document.getElementById('arrow-down');
+        const arrowLeft = document.getElementById('arrow-left');
+        const arrowRight = document.getElementById('arrow-right');
+
+        // Phase elements
+        const instructionsPhase = document.getElementById('instructionsPhase');
+        const capturePhase = document.getElementById('capturePhase');
+        
+        // Pose indicators
+        const yawValue = document.getElementById('yawValue');
+        const pitchValue = document.getElementById('pitchValue');
+        const rollValue = document.getElementById('rollValue');
+        const yawBar = document.getElementById('yawBar');
+        const pitchBar = document.getElementById('pitchBar');
+        const rollBar = document.getElementById('rollBar');
+        
+        // Capture elements
+        const capture1 = document.getElementById('capture1');
+        const capture2 = document.getElementById('capture2');
+        const capture3 = document.getElementById('capture3');
+        const capture4 = document.getElementById('capture4');
+        const capture5 = document.getElementById('capture5');
+        
+        // State variables
+        let cameraOn = false;
+        let faceDetected = false;
+        let captures = Array(10).fill(null);
+        let currentCapture = 0;
+        let faceMesh;
+        let captureTimer = null;
+        let captureStartTime = 0;
+        let currentPose = { yaw: 0, pitch: 0, roll: 0 };
+        let animationFrameId = null;
+        
+        // Target poses for each capture
+        const targetPoses = [
+            { yaw: 0, pitch: 0, roll: 0, label: "Frontal Position", poseId: 0 },
+            { yaw: 0, pitch: 0, roll: 0, label: "Frontal Position", poseId: 0 },
+            { yaw: -15, pitch: 0, roll: 0, label: "Left Yaw (-15°)", poseId: 1 },
+            { yaw: -15, pitch: 0, roll: 0, label: "Left Yaw (-15°)", poseId: 1 },
+            { yaw: 15, pitch: 0, roll: 0, label: "Right Yaw (+15°)", poseId: 2 },
+            { yaw: 15, pitch: 0, roll: 0, label: "Right Yaw (+15°)", poseId: 2 },
+            { yaw: 0, pitch: -12, roll: 0, label: "Up Pitch (-12°)", poseId: 3 },
+            { yaw: 0, pitch: -12, roll: 0, label: "Up Pitch (-12°)", poseId: 3 },
+            { yaw: 0, pitch: 12, roll: 0, label: "Down Pitch (+12°)", poseId: 4 },
+            { yaw: 0, pitch: 12, roll: 0, label: "Down Pitch (+12°)", poseId: 4 }
+        ];
+        
+        // Calibration system for improved accuracy
+        let calibrationOffsets = { yaw: 0, pitch: 0, roll: 0 };
+        let isCalibrating = false;
+        let calibrationSamples = [];
+        
+        // Initialize FaceMesh
+        async function initFaceMesh() {
+            faceMesh = new FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            faceMesh.onResults(onFaceMeshResults);
+            
+            statusText.textContent = "Face detection model loaded";
+            statusDot.classList.add('active');
+        }
+        
+        // Process FaceMesh results
+        function onFaceMeshResults(results) {
+            // Don't process results if camera is not active
+            if (!cameraOn) return;
+            
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                faceDetected = true;
+                const landmarks = results.multiFaceLandmarks[0];
+                
+                // Draw face mesh
+                drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, 
+                              {color: '#C0C0C070', lineWidth: 1});
+                
+                // Draw face bounding box
+                drawBoundingBox(landmarks);
+                
+                // Calculate head pose using enhanced method
+                let rawPose = calculateEnhancedHeadPose(landmarks);
+                
+                // Handle calibration
+                if (isCalibrating && calibrationSamples.length < 50) {
+                    calibrationSamples.push(rawPose);
+                }
+                
+                // Apply calibration offsets
+                currentPose = applyCalibratedPose(rawPose);
+                updatePoseIndicators(currentPose);
+                
+                // Analyze image quality for capture decisions only
+                const quality = analyzeImageQuality(landmarks);
+                
+                // Check if we should capture
+                checkCaptureConditions(currentPose, quality);
+            } else {
+                faceDetected = false;
+                hideGuidanceArrows();
+                // Only show target pose label if we haven't completed all captures
+                if (currentCapture < targetPoses.length) {
+                    statusText.textContent = "No face detected - " + targetPoses[currentCapture].label;
+                } else {
+                    statusText.textContent = "All captures completed!";
+                }
+                resetPoseIndicators();
+                captureStatus.textContent = "Position your face in the frame to begin capture";
+                captureStatus.className = "capture-status";
+                resetCaptureTimer();
+            }
+            
+            canvasCtx.restore();
+        }
+        
+        // Draw bounding box around the face
+        function drawBoundingBox(landmarks) {
+            let minX = Infinity, minY = Infinity;
+            let maxX = -Infinity, maxY = -Infinity;
+            
+            for (const landmark of landmarks) {
+                const x = landmark.x * canvasElement.width;
+                const y = landmark.y * canvasElement.height;
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+            }
+            
+            const width = maxX - minX;
+            const height = maxY - minY;
+            
+            // Expand the bounding box slightly
+            const padding = 20;
+            minX -= padding;
+            minY -= padding;
+            const expandedWidth = width + padding * 2;
+            const expandedHeight = height + padding * 2;
+            
+            // Draw bounding box
+            canvasCtx.beginPath();
+            canvasCtx.rect(minX, minY, expandedWidth, expandedHeight);
+            canvasCtx.strokeStyle = faceDetected ? '#4CAF50' : '#F44336';
+            canvasCtx.lineWidth = 3;
+            canvasCtx.stroke();
+        }
+        
+        // Enhanced pose estimation using multiple landmark sets for stability
+        function calculateEnhancedHeadPose(landmarks) {
+            // Multiple estimation methods for cross-validation
+            const method1 = calculatePoseFromEyesAndNose(landmarks);
+            const method2 = calculatePoseFromFaceContour(landmarks);
+            const method3 = calculatePoseFromMouthAndChin(landmarks);
+            
+            // Use simple pitch calculation as primary method
+            const simplePitch = calculateSimplePitch(landmarks);
+            
+            // Debug logging to see individual method results
+            // console.log('Method 1:', method1);
+            // console.log('Method 2:', method2);
+            // console.log('Method 3:', method3);
+            // console.log('Simple pitch:', simplePitch);
+            
+            // Weighted average of different methods
+            const yaw = (method1.yaw * 0.5 + method2.yaw * 0.3 + method3.yaw * 0.2);
+            
+            // For pitch, primarily use the simple method with minor influence from others
+            const pitch = simplePitch * 0.8 + (method1.pitch * 0.1 + method2.pitch * 0.1);
+            
+            const roll = (method1.roll * 0.6 + method2.roll * 0.4);
+            
+            // Apply smoothing filter
+            return applySmoothingFilter({ 
+                yaw: Math.max(-45, Math.min(45, yaw)), 
+                pitch: Math.max(-30, Math.min(30, pitch)), 
+                roll: Math.max(-30, Math.min(30, roll)) 
+            });
+        }
+        
+        // Method 1: Eyes and nose based estimation
+        function calculatePoseFromEyesAndNose(landmarks) {
+            const leftEyeOuter = landmarks[33];
+            const leftEyeInner = landmarks[133];
+            const rightEyeInner = landmarks[362];
+            const rightEyeOuter = landmarks[263];
+            const noseTip = landmarks[1];
+            const noseBridge = landmarks[168];
+            const chin = landmarks[152];
+            const forehead = landmarks[10];
+            
+            // Calculate eye centers
+            const leftEyeCenter = {
+                x: (leftEyeOuter.x + leftEyeInner.x) / 2,
+                y: (leftEyeOuter.y + leftEyeInner.y) / 2
+            };
+            const rightEyeCenter = {
+                x: (rightEyeOuter.x + rightEyeInner.x) / 2,
+                y: (rightEyeOuter.y + rightEyeInner.y) / 2
+            };
+            
+            // Eye line for roll calculation
+            const eyeLine = {
+                x: rightEyeCenter.x - leftEyeCenter.x,
+                y: rightEyeCenter.y - leftEyeCenter.y
+            };
+            const roll = Math.atan2(eyeLine.y, eyeLine.x) * (180 / Math.PI);
+            
+            // Nose deviation for yaw calculation
+            const eyeMidpoint = {
+                x: (leftEyeCenter.x + rightEyeCenter.x) / 2,
+                y: (leftEyeCenter.y + rightEyeCenter.y) / 2
+            };
+            const noseDeviation = noseTip.x - eyeMidpoint.x;
+            const eyeDistance = Math.sqrt(eyeLine.x * eyeLine.x + eyeLine.y * eyeLine.y);
+            const yaw = Math.asin(Math.max(-1, Math.min(1, noseDeviation / (eyeDistance * 0.5)))) * (180 / Math.PI);
+            
+            // Improved pitch calculation using multiple reference points
+            const eyeY = (leftEyeCenter.y + rightEyeCenter.y) / 2;
+            const noseY = noseTip.y;
+            const chinY = chin.y;
+            
+            // Calculate the ratio of nose position between eyes and chin
+            const totalFaceHeight = chinY - eyeY;
+            const noseToEyeDistance = noseY - eyeY;
+            
+            // Expected ratio when looking straight (approximately 0.4)
+            const expectedRatio = 0.4;
+            const actualRatio = totalFaceHeight > 0 ? noseToEyeDistance / totalFaceHeight : expectedRatio;
+            
+            // Calculate pitch based on deviation from expected ratio
+            const pitch = (actualRatio - expectedRatio) * 150; // Scale to degrees
+            
+            return { yaw: yaw * 1.2, pitch: Math.max(-30, Math.min(30, pitch)), roll };
+        }
+        
+        // Method 2: Face contour based estimation
+        function calculatePoseFromFaceContour(landmarks) {
+            const leftCheek = landmarks[234];
+            const rightCheek = landmarks[454];
+            const forehead = landmarks[10];
+            const chin = landmarks[152];
+            const noseTip = landmarks[1];
+            const leftEye = landmarks[33];
+            const rightEye = landmarks[263];
+            
+            // Face width asymmetry for yaw
+            const faceCenter = noseTip; // Nose tip as reference
+            const leftDistance = Math.abs(faceCenter.x - leftCheek.x);
+            const rightDistance = Math.abs(rightCheek.x - faceCenter.x);
+            const asymmetry = (rightDistance - leftDistance) / (rightDistance + leftDistance);
+            const yaw = asymmetry * 45; // Scale to degrees
+            
+            // Improved pitch calculation using face proportions
+            const eyeLevel = (leftEye.y + rightEye.y) / 2;
+            const faceHeight = chin.y - forehead.y;
+            const nosePosition = noseTip.y;
+            
+            // Calculate where the nose should be relative to eyes and chin for neutral pose
+            const expectedNoseY = eyeLevel + (faceHeight * 0.25); // 25% down from eye level
+            const noseDeviation = nosePosition - expectedNoseY;
+            
+            // Convert deviation to pitch angle
+            const pitch = (noseDeviation / faceHeight) * 60; // Scale to degrees
+            
+            // Cheek line for roll
+            const cheekLine = {
+                x: rightCheek.x - leftCheek.x,
+                y: rightCheek.y - leftCheek.y
+            };
+            const roll = Math.atan2(cheekLine.y, cheekLine.x) * (180 / Math.PI);
+            
+            return { yaw, pitch: Math.max(-25, Math.min(25, pitch)), roll };
+        }
+        
+        // Method 3: Mouth and chin based estimation
+        function calculatePoseFromMouthAndChin(landmarks) {
+            const leftMouth = landmarks[61];
+            const rightMouth = landmarks[291];
+            const upperLip = landmarks[13];
+            const lowerLip = landmarks[14];
+            const chin = landmarks[152];
+            const noseTip = landmarks[1];
+            const leftEye = landmarks[33];
+            const rightEye = landmarks[263];
+            
+            // Mouth line for roll
+            const mouthLine = {
+                x: rightMouth.x - leftMouth.x,
+                y: rightMouth.y - leftMouth.y
+            };
+            const roll = Math.atan2(mouthLine.y, mouthLine.x) * (180 / Math.PI);
+            
+            // Mouth center deviation for yaw calculation
+            const mouthCenter = {
+                x: (leftMouth.x + rightMouth.x) / 2,
+                y: (leftMouth.y + rightMouth.y) / 2
+            };
+            const faceCenter = noseTip;
+            const mouthDeviation = mouthCenter.x - faceCenter.x;
+            const yaw = mouthDeviation * 60; // Scale to degrees
+            
+            // Improved pitch calculation using mouth to eye relationship
+            const eyeLevel = (leftEye.y + rightEye.y) / 2;
+            const mouthY = mouthCenter.y;
+            const chinY = chin.y;
+            
+            // Calculate the ratio of mouth position between eyes and chin
+            const eyeToChinDistance = chinY - eyeLevel;
+            const eyeToMouthDistance = mouthY - eyeLevel;
+            
+            // Expected ratio for neutral pose (mouth is typically 60% down from eyes to chin)
+            const expectedRatio = 0.6;
+            const actualRatio = eyeToChinDistance > 0 ? eyeToMouthDistance / eyeToChinDistance : expectedRatio;
+            
+            // Calculate pitch based on deviation from expected ratio
+            const pitch = (actualRatio - expectedRatio) * 100; // Scale to degrees
+            
+            return { yaw, pitch: Math.max(-20, Math.min(20, pitch)), roll };
+        }
+        
+        // Simple and direct pitch calculation for better accuracy
+        function calculateSimplePitch(landmarks) {
+            const forehead = landmarks[10];
+            const noseTip = landmarks[1];
+            const chin = landmarks[152];
+            const leftEye = landmarks[33];
+            const rightEye = landmarks[263];
+            
+            // Use the vertical positions of key features
+            const eyeLevel = (leftEye.y + rightEye.y) / 2;
+            const totalFaceHeight = chin.y - forehead.y;
+            
+            // Calculate nose position relative to total face height
+            const noseFromTop = noseTip.y - forehead.y;
+            const noseRatio = noseFromTop / totalFaceHeight;
+            
+            // Expected nose ratio for neutral pose (approximately 0.45)
+            const neutralRatio = 0.45;
+            const deviation = noseRatio - neutralRatio;
+            
+            // Convert to pitch angle (negative = looking up, positive = looking down)
+            const pitch = deviation * 80; // Scale factor
+            
+            return Math.max(-25, Math.min(25, pitch));
+        }
+        
+        // Smoothing filter to reduce jitter
+        let poseHistory = [];
+        const historySize = 5;
+        
+        function applySmoothingFilter(pose) {
+            poseHistory.push(pose);
+            if (poseHistory.length > historySize) {
+                poseHistory.shift();
+            }
+            
+            // Calculate moving average
+            const avgYaw = poseHistory.reduce((sum, p) => sum + p.yaw, 0) / poseHistory.length;
+            const avgPitch = poseHistory.reduce((sum, p) => sum + p.pitch, 0) / poseHistory.length;
+            const avgRoll = poseHistory.reduce((sum, p) => sum + p.roll, 0) / poseHistory.length;
+            
+            return {
+                yaw: Math.round(avgYaw * 10) / 10,
+                pitch: Math.round(avgPitch * 10) / 10,
+                roll: Math.round(avgRoll * 10) / 10
+            };
+        }
+        
+        // Analyze image quality
+        function analyzeImageQuality(landmarks) {
+            // Face size calculation
+            let minX = Infinity, minY = Infinity;
+            let maxX = -Infinity, maxY = -Infinity;
+            
+            for (const landmark of landmarks) {
+                const x = landmark.x;
+                const y = landmark.y;
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+            }
+            
+            const faceWidth = maxX - minX;
+            const faceHeight = maxY - minY;
+            const faceArea = faceWidth * faceHeight;
+            const frameArea = 1; // Since coordinates are normalized to [0,1]
+            const faceCoverage = faceArea / frameArea * 100;
+            
+            // Lighting estimation (simplified)
+            const leftEye = landmarks[33];
+            const rightEye = landmarks[263];
+            const nose = landmarks[1];
+            const leftCheek = landmarks[123];
+            const rightCheek = landmarks[352];
+            
+            // Calculate average "brightness" of key points (simulated)
+            const brightness = (leftEye.z + rightEye.z + nose.z + leftCheek.z + rightCheek.z) / 5;
+            
+            // Occlusion detection (simplified)
+            let occlusion = "None";
+            if (leftEye.z > 0.1 || rightEye.z > 0.1) occlusion = "Partial";
+            if (nose.z > 0.15) occlusion = "Significant";
+            
+            return {
+                faceSize: faceCoverage,
+                lighting: brightness,
+                occlusion: occlusion
+            };
+        }
+        
+        // Update pose indicators with improved visualization
+        function updatePoseIndicators(pose) {
+            // Update values with better formatting
+            yawValue.textContent = pose.yaw.toFixed(1) + '°';
+            pitchValue.textContent = pose.pitch.toFixed(1) + '°';
+            rollValue.textContent = pose.roll.toFixed(1) + '°';
+            
+            // Clamp values to reasonable ranges for visualization
+            const clampedYaw = Math.max(-45, Math.min(45, pose.yaw));
+            const clampedPitch = Math.max(-30, Math.min(30, pose.pitch));
+            const clampedRoll = Math.max(-30, Math.min(30, pose.roll));
+            
+            // Update bars with improved scaling
+            yawBar.style.width = Math.max(5, Math.min(95, 50 + (clampedYaw / 45) * 45)) + '%';
+            pitchBar.style.width = Math.max(5, Math.min(95, 50 + (clampedPitch / 30) * 45)) + '%';
+            rollBar.style.width = Math.max(5, Math.min(95, 50 + (clampedRoll / 30) * 45)) + '%';
+            
+            // Only calculate accuracy and color coding if we haven't completed all captures
+            if (currentCapture < targetPoses.length) {
+                // Improved color coding based on accuracy thresholds
+                const yawAccuracy = Math.abs(pose.yaw - targetPoses[currentCapture].yaw);
+                const pitchAccuracy = Math.abs(pose.pitch - targetPoses[currentCapture].pitch);
+                const rollAccuracy = Math.abs(pose.roll);
+                
+                // Color based on accuracy with green/yellow/red gradient
+                yawBar.style.background = yawAccuracy < 6 ? '#4CAF50' : 
+                                         yawAccuracy < 15 ? '#FFC107' : '#FF5722';
+                pitchBar.style.background = pitchAccuracy < 5 ? '#4CAF50' : 
+                                           pitchAccuracy < 12 ? '#FFC107' : '#FF5722';
+                rollBar.style.background = rollAccuracy < 10 ? '#4CAF50' : 
+                                          rollAccuracy < 25 ? '#FFC107' : '#FF5722';
+            } else {
+                // All captures completed - use neutral colors
+                const neutralColor = '#4CAF50'; // Green to indicate completion
+                yawBar.style.background = neutralColor;
+                pitchBar.style.background = neutralColor;
+                rollBar.style.background = neutralColor;
+            }
+            
+            // Add visual feedback for out-of-range values
+            if (Math.abs(pose.yaw) > 60) yawValue.style.color = '#FF5722';
+            else yawValue.style.color = '#FFFFFF';
+            
+            if (Math.abs(pose.pitch) > 40) pitchValue.style.color = '#FF5722';
+            else pitchValue.style.color = '#FFFFFF';
+            
+            if (Math.abs(pose.roll) > 40) rollValue.style.color = '#FF5722';
+            else rollValue.style.color = '#FFFFFF';
+        }
+        
+        function resetPoseIndicators() {
+            yawValue.textContent = '0°';
+            pitchValue.textContent = '0°';
+            rollValue.textContent = '0°';
+            
+            // Reset colors
+            yawValue.style.color = '#FFFFFF';
+            pitchValue.style.color = '#FFFFFF';
+            rollValue.style.color = '#FFFFFF';
+            
+            yawBar.style.width = '50%';
+            pitchBar.style.width = '50%';
+            rollBar.style.width = '50%';
+            
+            const neutralColor = '#FFC107';
+            yawBar.style.background = neutralColor;
+            pitchBar.style.background = neutralColor;
+            rollBar.style.background = neutralColor;
+        }
+        
+        // Check if we should capture the image
+        function checkCaptureConditions(pose, quality) {
+            if (currentCapture >= 10) return;
+            
+            const target = targetPoses[currentCapture];
+            const withinYaw = Math.abs(pose.yaw - target.yaw) < 15;
+            const withinPitch = Math.abs(pose.pitch - target.pitch) < 12;
+            const withinRoll = Math.abs(pose.roll) < 25;
+            const goodFaceSize = quality.faceSize > 10;
+            const goodLighting = quality.lighting < 0.05;
+            const noOcclusion = quality.occlusion === "None";
+            
+            let allConditionsMet = withinYaw && withinPitch && withinRoll && 
+                                   goodFaceSize && goodLighting && noOcclusion;
+
+            let statusMessage = "";
+
+            // If it's the second capture of a pair, check for difference
+            if (currentCapture % 2 === 1) {
+                const prevCapture = captures[currentCapture - 1];
+                if (prevCapture) {
+                    const yawDiff = Math.abs(pose.yaw - prevCapture.pose.yaw);
+                    const pitchDiff = Math.abs(pose.pitch - prevCapture.pose.pitch);
+                    if (yawDiff < 2 && pitchDiff < 2) {
+                        allConditionsMet = false;
+                        statusMessage = "Move your head slightly for the second shot";
+                    }
+                }
+            }
+            
+            if (allConditionsMet) {
+                hideGuidanceArrows();
+                if (!captureTimer) {
+                    captureStartTime = Date.now();
+                    captureTimer = setInterval(updateCaptureProgress, 100);
+                    captureStatus.textContent = "Hold position...";
+                    captureStatus.className = "capture-status capture-warning";
+                }
+            } else {
+                resetCaptureTimer();
+                
+                if (statusMessage) {
+                    captureStatus.textContent = statusMessage;
+                    hideGuidanceArrows();
+                } else if (!withinYaw || !withinPitch || !withinRoll) {
+                    captureStatus.textContent = "Adjust your head position";
+                    updateGuidanceArrows(pose, target);
+                } else {
+                    hideGuidanceArrows();
+                    if (!goodFaceSize) {
+                        captureStatus.textContent = "Move closer to the camera";
+                    } else if (!goodLighting) {
+                        captureStatus.textContent = "Improve lighting conditions";
+                    } else if (!noOcclusion) {
+                        captureStatus.textContent = "Remove obstructions from face";
+                    }
+                }
+                captureStatus.className = "capture-status capture-warning";
+            }
+        }
+        
+        // Update capture progress
+        function updateCaptureProgress() {
+            const elapsed = Date.now() - captureStartTime;
+            const duration = 300;
+            
+            if (elapsed >= duration) {
+                captureFrame();
+                resetCaptureTimer();
+                return;
+            }
+            
+            const progress = (elapsed / duration) * 100;
+            progressBar.style.width = progress + '%';
+        }
+        
+        // Reset the capture timer
+        function resetCaptureTimer() {
+            if (captureTimer) {
+                clearInterval(captureTimer);
+                captureTimer = null;
+            }
+            progressBar.style.width = '0%';
+        }
+        
+        // Start camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: "user",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+                
+                videoElement.srcObject = stream;
+                cameraOn = true;
+                startBtn.textContent = "Stop Camera";
+                // Only show target pose label if we haven't completed all captures
+                if (currentCapture < targetPoses.length) {
+                    statusText.textContent = "Camera active - " + targetPoses[currentCapture].label;
+                } else {
+                    statusText.textContent = "All captures completed!";
+                }
+                
+                // The canvas size is now fixed, so we don't need to update it on loadedmetadata
+                /*
+                videoElement.addEventListener('loadedmetadata', () => {
+                    canvasElement.width = videoElement.videoWidth;
+                    canvasElement.height = videoElement.videoHeight;
+                });
+                */
+                
+                // Start processing video
+                processVideo();
+            } catch (err) {
+                console.error("Camera error: ", err);
+                statusText.textContent = "Camera error: " + err.message;
+                statusDot.classList.remove('active');
+            }
+        }
+        
+        // Stop camera
+        function stopCamera() {
+            if (videoElement.srcObject) {
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+            cameraOn = false;
+            
+            // Cancel the animation frame
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            startBtn.textContent = "Start Camera";
+            statusText.textContent = "Camera stopped";
+            statusDot.classList.remove('active');
+            resetCaptureTimer();
+        }
+        
+        // Process video frames
+        async function processVideo() {
+            if (!cameraOn) {
+                animationFrameId = null;
+                return;
+            }
+            
+            if (videoElement.readyState >= 2) {
+                await faceMesh.send({image: videoElement});
+            }
+            
+            animationFrameId = requestAnimationFrame(processVideo);
+        }
+        
+        // Capture current frame
+        function captureFrame() {
+            if (!faceDetected || currentCapture >= targetPoses.length) return;
+            
+            // Create a canvas to capture the frame
+            const captureCanvas = document.createElement('canvas');
+            captureCanvas.width = videoElement.videoWidth;
+            captureCanvas.height = videoElement.videoHeight;
+            const ctx = captureCanvas.getContext('2d');
+            
+            // Draw the current video frame (mirrored)
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.drawImage(videoElement, 0, 0, captureCanvas.width * -1, captureCanvas.height);
+            ctx.restore();
+            
+            // Save the captured image
+            const imgData = captureCanvas.toDataURL('image/jpeg');
+            captures[currentCapture] = { imgData: imgData, pose: { ...currentPose } };
+            
+            // Update the preview in target item
+            const poseId = targetPoses[currentCapture].poseId;
+            const subId = (currentCapture % 2) + 1;
+            const preview = document.getElementById(`preview${poseId + 1}_${subId}`);
+
+            if (preview) {
+                preview.style.backgroundImage = `url(${imgData})`;
+                preview.style.backgroundSize = 'cover';
+                preview.style.backgroundPosition = 'center';
+                preview.innerHTML = '✓';
+                preview.classList.remove('guide-image');
+                preview.classList.add('captured');
+            }
+            
+            // Show capture confirmation
+            captureStatus.textContent = `✅ Captured ${currentCapture + 1}/10: ${targetPoses[currentCapture].label}`;
+            captureStatus.className = "capture-status capture-good";
+            
+            // Move to next capture
+            currentCapture++;
+            
+            // Update target items
+            updateTargetItems();
+            
+            // Update target pose
+            if (currentCapture < 10) {
+                targetPose.textContent = `🎯 Target: ${targetPoses[currentCapture].label}`;
+                statusText.textContent = "Ready for next capture - " + targetPoses[currentCapture].label;
+                
+                // Reset timer for next capture (only if not completed)
+                setTimeout(() => {
+                    captureStatus.textContent = "Position for next capture";
+                    captureStatus.className = "capture-status";
+                }, 2000);
+            } else {
+                targetPose.textContent = "🎯 All captures completed!";
+                statusText.textContent = "All captures completed!";
+                submitBtn.disabled = false;
+                captureStatus.textContent = "✅ All images captured successfully!";
+            }
+        }
+        
+        // Reset all captures
+        function resetCaptures() {
+            currentCapture = 0;
+            captures = Array(10).fill(null);
+            
+            // Reset preview items with guide images
+            for (let i = 0; i < 5; i++) {
+                const preview1 = document.getElementById(`preview${i + 1}_1`);
+                const preview2 = document.getElementById(`preview${i + 1}_2`);
+                
+                if (preview1) {
+                    preview1.style.backgroundImage = `url('/static/${['frontal.png', 'yaw_left.png', 'yaw_right.png', 'pitch_up.png', 'pitch_down.png'][i]}')`;
+                    preview1.innerHTML = '';
+                    preview1.classList.add('guide-image');
+                    preview1.classList.remove('captured');
+                }
+                if (preview2) {
+                    preview2.style.backgroundImage = `url('/static/${['frontal.png', 'yaw_left.png', 'yaw_right.png', 'pitch_up.png', 'pitch_down.png'][i]}')`;
+                    preview2.innerHTML = '';
+                    preview2.classList.add('guide-image');
+                    preview2.classList.remove('captured');
+                }
+            }
+            
+            // Update UI
+            updateTargetItems();
+            targetPose.textContent = `🎯 Target: ${targetPoses[currentCapture].label}`;
+            statusText.textContent = "Ready for capture - " + targetPoses[currentCapture].label;
+            submitBtn.disabled = true;
+            captureStatus.textContent = "Position your face in the frame to begin capture";
+            captureStatus.className = "capture-status";
+            resetCaptureTimer();
+        }
+        
+        // Submit captured images to server
+        async function submitDataset() {
+            try {
+                // Get user ID from URL or page context
+                const pathParts = window.location.pathname.split('/');
+                const userId = pathParts[pathParts.length - 1];
+                
+                if (!userId) {
+                    alert('Error: No user ID found');
+                    return;
+                }
+                
+                // Prepare the data
+                const data = {
+                    images: captures.filter(c => c !== null).map(c => c.imgData)
+                };
+                
+                if (data.images.length !== 10) {
+                    alert('Error: All 10 positions must be captured before submitting');
+                    return;
+                }
+                
+                // Show loading state
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+                captureStatus.textContent = "Uploading face dataset...";
+                captureStatus.className = "capture-status warning";
+                
+                // Send to server
+                const response = await fetch(`/face_capture/${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Success - show thank you message
+                    captureStatus.textContent = "✅ Face dataset submitted successfully!";
+                    captureStatus.className = "capture-status capture-good";
+                    
+                    // Show thank you message
+                    setTimeout(() => {
+                        document.body.innerHTML = `
+                            <div style="display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                <div>
+                                    <h1 style="font-size: 3rem; margin-bottom: 20px;">🎉 Thank You!</h1>
+                                    <p style="font-size: 1.5rem; margin-bottom: 10px;">Thank you for taking the time to register your face.</p>
+                                    <p style="font-size: 1.2rem; opacity: 0.8;">Your dataset has been successfully saved.</p>
+                                    <p style="font-size: 1rem; margin-top: 30px; opacity: 0.6;">You can now close this window.</p>
+                                </div>
+                            </div>
+                        `;
+                    }, 2000);
+                } else {
+                    // Error
+                    captureStatus.textContent = `❌ Error: ${result.error}`;
+                    captureStatus.className = "capture-status capture-bad";
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Dataset';
+                }
+                
+            } catch (error) {
+                console.error('Error submitting dataset:', error);
+                captureStatus.textContent = "❌ Network error. Please try again.";
+                captureStatus.className = "capture-status capture-bad";
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Dataset';
+            }
+        }
+        
+        // Calibration system for improved accuracy
+        function startCalibration() {
+            isCalibrating = true;
+            calibrationSamples = [];
+            captureStatus.textContent = "Calibration: Look straight ahead and stay still for 3 seconds";
+            captureStatus.className = "capture-status warning";
+            
+            setTimeout(() => {
+                if (calibrationSamples.length > 10) {
+                    // Calculate average offsets
+                    const avgYaw = calibrationSamples.reduce((sum, s) => sum + s.yaw, 0) / calibrationSamples.length;
+                    const avgPitch = calibrationSamples.reduce((sum, s) => sum + s.pitch, 0) / calibrationSamples.length;
+                    const avgRoll = calibrationSamples.reduce((sum, s) => sum + s.roll, 0) / calibrationSamples.length;
+                    
+                    calibrationOffsets = { yaw: -avgYaw, pitch: -avgPitch, roll: -avgRoll };
+                    
+                    captureStatus.textContent = "Calibration complete! Pose measurements are now more accurate.";
+                    captureStatus.className = "capture-status good";
+                    
+                    setTimeout(() => {
+                        captureStatus.textContent = "Position your face in the frame to begin capture";
+                        captureStatus.className = "capture-status";
+                    }, 2000);
+                } else {
+                    captureStatus.textContent = "Calibration failed - not enough stable samples. Try again.";
+                    captureStatus.className = "capture-status bad";
+                }
+                
+                isCalibrating = false;
+            }, 3000);
+        }
+        
+        // Apply calibration offsets to pose measurements
+        function applyCalibratedPose(pose) {
+            return {
+                yaw: pose.yaw + calibrationOffsets.yaw,
+                pitch: pose.pitch + calibrationOffsets.pitch,
+                roll: pose.roll + calibrationOffsets.roll
+            };
+        }
+        
+        // Phase management
+        function showInstructionsPhase() {
+            instructionsPhase.classList.remove('hidden');
+            capturePhase.classList.remove('active');
+        }
+        
+        function showCapturePhase() {
+            instructionsPhase.classList.add('hidden');
+            capturePhase.classList.add('active');
+        }
+        
+        // Update target items visual state
+        function updateTargetItems() {
+            const guideImages = [
+                '/static/frontal.png', '/static/yaw_left.png', '/static/yaw_right.png',
+                '/static/pitch_up.png', '/static/pitch_down.png'
+            ];
+            
+            for (let i = 0; i < 5; i++) {
+                const targetItem = document.getElementById(`target${i + 1}`);
+                const preview1 = document.getElementById(`preview${i + 1}_1`);
+                const preview2 = document.getElementById(`preview${i + 1}_2`);
+                
+                targetItem.classList.remove('current', 'completed');
+                
+                const captureIndex1 = i * 2;
+                const captureIndex2 = i * 2 + 1;
+
+                // Style preview 1
+                if (captures[captureIndex1]) {
+                    preview1.style.backgroundImage = `url(${captures[captureIndex1].imgData})`;
+                    preview1.innerHTML = '✓';
+                    preview1.classList.remove('guide-image');
+                    preview1.classList.add('captured');
+                } else {
+                    preview1.style.backgroundImage = `url('${guideImages[i]}')`;
+                    preview1.innerHTML = '';
+                    preview1.classList.add('guide-image');
+                    preview1.classList.remove('captured');
+                }
+
+                // Style preview 2
+                if (captures[captureIndex2]) {
+                    preview2.style.backgroundImage = `url(${captures[captureIndex2].imgData})`;
+                    preview2.innerHTML = '✓';
+                    preview2.classList.remove('guide-image');
+                    preview2.classList.add('captured');
+                } else {
+                    preview2.style.backgroundImage = `url('${guideImages[i]}')`;
+                    preview2.innerHTML = '';
+                    preview2.classList.add('guide-image');
+                    preview2.classList.remove('captured');
+                }
+
+                const currentPoseId = currentCapture < 10 ? targetPoses[currentCapture].poseId : -1;
+
+                if (i < currentPoseId) {
+                    targetItem.classList.add('completed');
+                } else if (i === currentPoseId) {
+                    targetItem.classList.add('current');
+                } else {
+                    // Future targets
+                    if (!captures[captureIndex1]) {
+                        preview1.style.backgroundImage = `url('${guideImages[i]}')`;
+                        preview1.innerHTML = '';
+                        preview1.classList.add('guide-image');
+                        preview1.classList.remove('captured');
+                    }
+                    if (!captures[captureIndex2]) {
+                        preview2.style.backgroundImage = `url('${guideImages[i]}')`;
+                        preview2.innerHTML = '';
+                        preview2.classList.add('guide-image');
+                        preview2.classList.remove('captured');
+                    }
+                }
+            }
+        }
+
+        function updateGuidanceArrows(current, target) {
+            const yawDiff = target.yaw - current.yaw;
+            const pitchDiff = target.pitch - current.pitch;
+
+            // Yaw guidance
+            if (yawDiff > 6) { // Need to turn right
+                arrowRight.classList.add('visible');
+                arrowLeft.classList.remove('visible');
+            } else if (yawDiff < -6) { // Need to turn left
+                arrowLeft.classList.add('visible');
+                arrowRight.classList.remove('visible');
+            } else {
+                arrowLeft.classList.remove('visible');
+                arrowRight.classList.remove('visible');
+            }
+
+            // Pitch guidance
+            if (pitchDiff > 5) { // Need to tilt down
+                arrowDown.classList.add('visible');
+                arrowUp.classList.remove('visible');
+            } else if (pitchDiff < -5) { // Need to tilt up
+                arrowUp.classList.add('visible');
+                arrowDown.classList.remove('visible');
+            } else {
+                arrowUp.classList.remove('visible');
+                arrowDown.classList.remove('visible');
+            }
+        }
+
+        function hideGuidanceArrows() {
+            arrowUp.classList.remove('visible');
+            arrowDown.classList.remove('visible');
+            arrowLeft.classList.remove('visible');
+            arrowRight.classList.remove('visible');
+        }
+        
+        // Event Listeners
+        startBtn.addEventListener('click', async () => {
+            if (instructionsPhase.classList.contains('hidden')) {
+                // Already in capture phase, toggle camera
+                if (cameraOn) {
+                    stopCamera();
+                } else {
+                    await startCamera();
+                }
+            } else {
+                // Start from instructions phase
+                showCapturePhase();
+                await startCamera();
+            }
+        });
+        
+        backBtn.addEventListener('click', () => {
+            showInstructionsPhase();
+            if (cameraOn) {
+                stopCamera();
+            }
+        });
+        
+        resetBtn.addEventListener('click', () => {
+            resetCaptures();
+            updateTargetItems();
+        });
+        
+        calibrateBtn.addEventListener('click', startCalibration);
+        submitBtn.addEventListener('click', submitDataset);
+        
+        // Initialize
+        window.onload = async () => {
+            await initFaceMesh();
+            updateTargetItems(); // Initialize target items
+        };
+    </script>
+</body>
+</html>

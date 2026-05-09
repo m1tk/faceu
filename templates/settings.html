@@ -1,0 +1,1193 @@
+{% extends 'base.html' %}
+{% block head %}
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    #crop-rect { 
+        border: 2px dashed #3b82f6; 
+        position: absolute; 
+        background: rgba(59,130,246,0.1); 
+        pointer-events: auto;
+        z-index: 5;
+    }
+    .feed-container { 
+        position: relative; 
+        display: inline-block; 
+    }
+    #entry-line, #exit-line {
+        position: absolute;
+        z-index: 10;
+        pointer-events: auto;
+        display: none !important; /* Hide HTML lines since we draw on canvas now */
+    }
+    .real-time-indicator {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(34, 197, 94, 0.9);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 flex items-center">
+                    <svg class="w-8 h-8 mr-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path>
+                    </svg>
+                    Camera Settings
+                </h1>
+                <p class="text-gray-600 mt-2">Configure video processing and entry/exit detection for <span class="font-semibold text-blue-600">{{name}}</span></p>
+            </div>
+            
+            <a href="/" class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Back to Cameras
+            </a>
+        </div>
+    </div>
+    
+    <!-- Dual Feed Preview -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Raw Feed -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-gray-200 relative">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                    <div>
+                        <h2 class="text-lg font-semibold text-blue-900">Raw Feed</h2>
+                        <p class="text-sm text-blue-700">Original camera input</p>
+                    </div>
+                </div>
+                <span class="real-time-indicator">LIVE</span>
+            </div>
+            <div class="p-4">
+                <div id="raw-feed-container" class="feed-container relative bg-gray-900 rounded-lg overflow-hidden">
+                    <img id="raw-feed" src="/feed/{{name}}/stream?raw=1" class="w-full h-auto max-h-80 object-contain" />
+                    <div id="crop-rect"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Result Feed -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-purple-50 to-purple-100 px-6 py-4 border-b border-gray-200 relative">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                    <div>
+                        <h2 class="text-lg font-semibold text-purple-900">Result Feed</h2>
+                        <p class="text-sm text-purple-700">Processed with face detection</p>
+                    </div>
+                </div>
+                <span class="real-time-indicator">LIVE</span>
+            </div>
+            <div class="p-4">
+                <div id="result-feed-container" class="feed-container relative bg-gray-900 rounded-lg overflow-hidden">
+                    <canvas id="result-canvas" class="w-full h-auto max-h-80 object-contain"></canvas>
+                    <div id="entry-line" style="position:absolute; display:none;"></div>
+                    <div id="exit-line" style="position:absolute; display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Settings Form -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Configuration Settings</h2>
+            <p class="text-sm text-gray-600">Adjust video processing and detection parameters</p>
+        </div>
+        
+        <form method="post" class="p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Basic Settings -->
+                <div class="space-y-6">
+                    <div class="border-l-4 border-blue-500 pl-6">
+                        <h3 class="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Basic Settings
+                        </h3>
+                        
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Width</label>
+                                    <input name="width" 
+                                           value="{{settings.width|default(640)}}" 
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                           placeholder="640"/>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Height</label>
+                                    <input name="height" 
+                                           value="{{settings.height|default(480)}}" 
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                           placeholder="480"/>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">FPS (1-30)</label>
+                                    <input name="fps" 
+                                           type="number" 
+                                           min="1" 
+                                           max="30" 
+                                           value="{{settings.fps|default(5)}}" 
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                           placeholder="5"/>
+                                    <p class="text-xs text-gray-500 mt-1">Higher values = smoother video, more CPU usage</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Rotate Feed</label>
+                                    <select name="rotate" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                                        <option value="0" {% if settings.rotate|default(0) == 0 %}selected{% endif %}>0° (None)</option>
+                                        <option value="90" {% if settings.rotate|default(0) == 90 %}selected{% endif %}>90°</option>
+                                        <option value="180" {% if settings.rotate|default(0) == 180 %}selected{% endif %}>180°</option>
+                                        <option value="270" {% if settings.rotate|default(0) == 270 %}selected{% endif %}>270°</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Settings -->
+                <div class="space-y-6">
+                    <div class="border-l-4 border-purple-500 pl-6">
+                        <h3 class="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Processing Settings
+                        </h3>
+                        <p class="text-sm text-purple-700 mb-4">Applied to Result Feed</p>
+                        
+                        <div class="space-y-4">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" 
+                                       name="crop" 
+                                       value="1" 
+                                       id="crop-checkbox" 
+                                       {% if settings.crop|default(false) %}checked{% endif %} 
+                                       class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                                <label for="crop-checkbox" class="text-sm font-medium text-gray-700">Enable Crop</label>
+                            </div>
+                            <p class="text-xs text-gray-500">Extract a specific region from the camera feed</p>
+                            
+                            <div id="crop-controls" {% if not settings.crop|default(false) %}style="display:none;"{% endif %} class="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                                <div class="grid grid-cols-4 gap-2">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">X</label>
+                                        <input type="number" 
+                                               id="crop-x" 
+                                               name="x" 
+                                               value="{{settings.x|default(50)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="0">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Y</label>
+                                        <input type="number" 
+                                               id="crop-y" 
+                                               name="y" 
+                                               value="{{settings.y|default(50)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="0">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">W</label>
+                                        <input type="number" 
+                                               id="crop-w" 
+                                               name="w" 
+                                               value="{{settings.w|default(200)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="1">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">H</label>
+                                        <input type="number" 
+                                               id="crop-h" 
+                                               name="h" 
+                                               value="{{settings.h|default(150)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="1">
+                                    </div>
+                                </div>
+                                <p class="text-xs text-purple-700">Drag the blue rectangle on the Raw Feed or enter values manually</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Settings -->
+                <div class="space-y-6">
+                    <div class="border-l-4 border-purple-500 pl-6">
+                        <h3 class="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Processing Settings
+                        </h3>
+                        <p class="text-sm text-purple-700 mb-4">Applied to Result Feed</p>
+                        
+                        <div class="space-y-4">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" 
+                                       name="crop" 
+                                       value="1" 
+                                       id="crop-checkbox" 
+                                       {% if settings.crop|default(false) %}checked{% endif %} 
+                                       class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                                <label for="crop-checkbox" class="text-sm font-medium text-gray-700">Enable Crop</label>
+                            </div>
+                            <p class="text-xs text-gray-500">Extract a specific region from the camera feed</p>
+                            
+                            <div id="crop-controls" {% if not settings.crop|default(false) %}style="display:none;"{% endif %} class="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                                <div class="grid grid-cols-4 gap-2">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">X</label>
+                                        <input type="number" 
+                                               id="crop-x" 
+                                               name="x" 
+                                               value="{{settings.x|default(50)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="0">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Y</label>
+                                        <input type="number" 
+                                               id="crop-y" 
+                                               name="y" 
+                                               value="{{settings.y|default(50)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="0">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">W</label>
+                                        <input type="number" 
+                                               id="crop-w" 
+                                               name="w" 
+                                               value="{{settings.w|default(200)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="1">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">H</label>
+                                        <input type="number" 
+                                               id="crop-h" 
+                                               name="h" 
+                                               value="{{settings.h|default(150)}}" 
+                                               class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                               min="1">
+                                    </div>
+                                </div>
+                                <p class="text-xs text-purple-700">Drag the blue rectangle on the Raw Feed or enter values manually</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Entry/Exit Detection Section -->
+            <div class="lg:col-span-2 mt-8 pt-8 border-t border-gray-200">
+                <div class="border-l-4 border-emerald-500 pl-6">
+                    <h3 class="text-lg font-semibold text-emerald-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                        </svg>
+                        Entry/Exit Detection
+                    </h3>
+                    <p class="text-sm text-emerald-700 mb-6">Configure how entry and exit events are detected</p>
+                    
+                    <!-- Detection Mode Selection -->
+                    <div class="mb-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                        <h4 class="text-sm font-semibold text-emerald-900 mb-3">Detection Mode</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center space-x-3">
+                                <input type="radio" 
+                                       name="detection_mode" 
+                                       value="line" 
+                                       id="detection-mode-line" 
+                                       {% if not settings.detection_mode or settings.detection_mode == 'line' %}checked{% endif %}
+                                       class="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500">
+                                <label class="text-sm font-medium text-gray-900" for="detection-mode-line">
+                                    Entry/Exit Lines - Use virtual lines in the camera view to detect crossing
+                                </label>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <input type="radio" 
+                                       name="detection_mode" 
+                                       value="camera" 
+                                       id="detection-mode-camera" 
+                                       {% if settings.detection_mode == 'camera' %}checked{% endif %}
+                                       class="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500">
+                                <label class="text-sm font-medium text-gray-900" for="detection-mode-camera">
+                                    Camera Type - Designate this camera as entry or exit only
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Line Detection Configuration -->
+                    <div id="line-detection-config" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="{% if settings.detection_mode == 'camera' %}display: none;{% endif %}">
+                        <!-- Entry Line -->
+                        <div class="space-y-4">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" 
+                                       name="entry_line_enabled" 
+                                       value="1" 
+                                       id="entry-line-checkbox" 
+                                       {% if settings.entry_line %}checked{% endif %} 
+                                       class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                                <label class="text-sm font-medium text-gray-900" for="entry-line-checkbox">
+                                    Enable Entry Line
+                                </label>
+                            </div>
+                            
+                            <div id="entry-line-controls" style="{% if not settings.entry_line %}display: none;{% endif %}" class="space-y-4 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                                <h4 class="text-sm font-semibold text-emerald-900 flex items-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Entry Line Configuration
+                                </h4>
+                                
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Orientation</label>
+                                        <select name="entry_line_orientation" 
+                                                id="entry-line-orientation" 
+                                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                            <option value="horizontal" {% if settings.entry_line and settings.entry_line.orientation == 'horizontal' %}selected{% endif %}>Horizontal</option>
+                                            <option value="vertical" {% if settings.entry_line and settings.entry_line.orientation == 'vertical' %}selected{% endif %}>Vertical</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Position</label>
+                                        <input type="number" 
+                                               name="entry_line_pos" 
+                                               id="entry-line-pos" 
+                                               class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                               min="0" 
+                                               max="2000" 
+                                               value="{{settings.entry_line.y if settings.entry_line and settings.entry_line.orientation == 'horizontal' else settings.entry_line.x if settings.entry_line else 100}}">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Direction</label>
+                                        <select name="entry_line_dir" 
+                                                id="entry-line-dir" 
+                                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                            <option value="top" {% if settings.entry_line and settings.entry_line.direction == 'top' %}selected{% endif %}>Top</option>
+                                            <option value="bottom" {% if settings.entry_line and settings.entry_line.direction == 'bottom' %}selected{% endif %}>Bottom</option>
+                                            <option value="left" {% if settings.entry_line and settings.entry_line.direction == 'left' %}selected{% endif %}>Left</option>
+                                            <option value="right" {% if settings.entry_line and settings.entry_line.direction == 'right' %}selected{% endif %}>Right</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Exit Line -->
+                        <div class="space-y-4">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" 
+                                       name="exit_line_enabled" 
+                                       value="1" 
+                                       id="exit-line-checkbox" 
+                                       {% if settings.exit_line %}checked{% endif %} 
+                                       class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                                <label class="text-sm font-medium text-gray-900" for="exit-line-checkbox">
+                                    Enable Exit Line
+                                </label>
+                            </div>
+                            
+                            <div id="exit-line-controls" style="{% if not settings.exit_line %}display: none;{% endif %}" class="space-y-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                                <h4 class="text-sm font-semibold text-red-900 flex items-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m10 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                                    </svg>
+                                    Exit Line Configuration
+                                </h4>
+                                
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Orientation</label>
+                                        <select name="exit_line_orientation" 
+                                                id="exit-line-orientation" 
+                                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                                            <option value="horizontal" {% if settings.exit_line and settings.exit_line.orientation == 'horizontal' %}selected{% endif %}>Horizontal</option>
+                                            <option value="vertical" {% if settings.exit_line and settings.exit_line.orientation == 'vertical' %}selected{% endif %}>Vertical</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Position</label>
+                                        <input type="number" 
+                                               name="exit_line_pos" 
+                                               id="exit-line-pos" 
+                                               class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                               min="0" 
+                                               max="2000" 
+                                               value="{{settings.exit_line.y if settings.exit_line and settings.exit_line.orientation == 'horizontal' else settings.exit_line.x if settings.exit_line else 200}}">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">Direction</label>
+                                        <select name="exit_line_dir" 
+                                                id="exit-line-dir" 
+                                                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                                            <option value="top" {% if settings.exit_line and settings.exit_line.direction == 'top' %}selected{% endif %}>Top</option>
+                                            <option value="bottom" {% if settings.exit_line and settings.exit_line.direction == 'bottom' %}selected{% endif %}>Bottom</option>
+                                            <option value="left" {% if settings.exit_line and settings.exit_line.direction == 'left' %}selected{% endif %}>Left</option>
+                                            <option value="right" {% if settings.exit_line and settings.exit_line.direction == 'right' %}selected{% endif %}>Right</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Camera Type Configuration -->
+                    <div id="camera-type-config" style="{% if not settings.detection_mode or settings.detection_mode == 'line' %}display: none;{% endif %}">
+                        <div class="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <h4 class="text-sm font-semibold text-purple-900 mb-3 flex items-center">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                                Camera Type Selection
+                            </h4>
+                            <div class="space-y-3">
+                                <div class="flex items-center space-x-3">
+                                    <input type="radio" 
+                                           name="camera_type" 
+                                           value="entry" 
+                                           id="camera-type-entry" 
+                                           {% if not settings.camera_type or settings.camera_type == 'entry' %}checked{% endif %}
+                                           class="w-4 h-4 text-purple-600 border-gray-300 focus:ring-purple-500">
+                                    <label class="text-sm font-medium text-gray-900" for="camera-type-entry">
+                                        Entry Camera - All detected faces are considered entries
+                                    </label>
+                                </div>
+                                <div class="flex items-center space-x-3">
+                                    <input type="radio" 
+                                           name="camera_type" 
+                                           value="exit" 
+                                           id="camera-type-exit" 
+                                           {% if settings.camera_type == 'exit' %}checked{% endif %}
+                                           class="w-4 h-4 text-purple-600 border-gray-300 focus:ring-purple-500">
+                                    <label class="text-sm font-medium text-gray-900" for="camera-type-exit">
+                                        Exit Camera - All detected faces are considered exits
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div class="flex items-start space-x-3">
+                            <svg class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m-3 0a1.5 1.5 0 013 0"></path>
+                            </svg>
+                            <div>
+                                <h4 class="text-sm font-medium text-blue-900">Configuration Tips</h4>
+                                <p class="text-sm text-blue-700 mt-1">
+                                    <span id="line-mode-tip" style="{% if settings.detection_mode == 'camera' %}display: none;{% endif %}">
+                                        Drag the colored lines on the Result Feed or use the controls above to set entry/exit positions and movement directions.
+                                    </span>
+                                    <span id="camera-mode-tip" style="{% if not settings.detection_mode or settings.detection_mode == 'line' %}display: none;{% endif %}">
+                                        In camera type mode, all face detections will be logged as the selected type (entry or exit). This is useful when you have separate cameras for entry and exit points.
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="lg:col-span-2 mt-8 pt-6 border-t border-gray-200">
+                <button type="submit" 
+                        class="w-full bg-emerald-600 text-white py-3 px-4 rounded-lg hover:bg-emerald-700 transition-colors font-medium flex items-center justify-center text-lg">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Save All Settings Permanently
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get DOM elements with error checking
+    const cropCheckbox = document.getElementById('crop-checkbox');
+    const cropControls = document.getElementById('crop-controls');
+    const cropRect = document.getElementById('crop-rect');
+    const rawFeedContainer = document.getElementById('raw-feed-container');
+    const resultFeedContainer = document.getElementById('result-feed-container');
+    const cropX = document.getElementById('crop-x');
+    const cropY = document.getElementById('crop-y');
+    const cropW = document.getElementById('crop-w');
+    const cropH = document.getElementById('crop-h');
+    const rawFeed = document.getElementById('raw-feed');
+    const resultCanvas = document.getElementById('result-canvas');
+    
+    // Check if all required elements exist
+    if (!cropCheckbox || !rawFeed || !resultCanvas) {
+        console.error('Required elements not found');
+        return;
+    }
+    
+    const resultCtx = resultCanvas.getContext('2d');
+    
+    // Line elements
+    const entryLineCheckbox = document.getElementById('entry-line-checkbox');
+    const entryLineControls = document.getElementById('entry-line-controls');
+    const exitLineCheckbox = document.getElementById('exit-line-checkbox');
+    const exitLineControls = document.getElementById('exit-line-controls');
+    const entryLinePos = document.getElementById('entry-line-pos');
+    const entryLineOrientation = document.getElementById('entry-line-orientation');
+    const entryLineDir = document.getElementById('entry-line-dir');
+    const exitLinePos = document.getElementById('exit-line-pos');
+    const exitLineOrientation = document.getElementById('exit-line-orientation');
+    const exitLineDir = document.getElementById('exit-line-dir');
+
+    // Settings input elements
+    const widthInput = document.querySelector('input[name="width"]');
+    const heightInput = document.querySelector('input[name="height"]');
+    const rotateSelect = document.querySelector('select[name="rotate"]');
+
+    // --- Real-time result feed update loop (frontend-only, MJPEG stream, robust) ---
+    let isDrawing = false;
+    
+    function startLivePreview() {
+        if (isDrawing) return;
+        isDrawing = true;
+        
+        function drawLoop() {
+            if (!isDrawing) return;
+            processRawFeed(); // Always draw the latest visible frame
+            requestAnimationFrame(drawLoop);
+        }
+        requestAnimationFrame(drawLoop);
+    }
+
+    // Start drawing when raw feed loads
+    rawFeed.addEventListener('load', function() {
+        startLivePreview();
+    });
+
+    // Start immediately if image is already loaded
+    if (rawFeed.complete && rawFeed.naturalWidth > 0) {
+        console.log('Raw feed already loaded, starting live preview immediately');
+        startLivePreview();
+    }
+
+    // Process raw feed and apply settings to result canvas continuously
+    function processRawFeed() {
+        // Check if raw feed image is ready
+        if (!rawFeed.complete || rawFeed.naturalWidth === 0 || rawFeed.naturalHeight === 0) {
+            return; // Skip this frame if image is not ready
+        }
+
+        // Set canvas dimensions to match the displayed raw feed
+        const displayWidth = rawFeed.offsetWidth;
+        const displayHeight = rawFeed.offsetHeight;
+
+        if (displayWidth === 0 || displayHeight === 0) {
+            return; // Skip if dimensions not available
+        }
+
+        if (resultCanvas.width !== displayWidth || resultCanvas.height !== displayHeight) {
+            resultCanvas.width = displayWidth;
+            resultCanvas.height = displayHeight;
+            resultCanvas.style.width = displayWidth + 'px';
+            resultCanvas.style.height = displayHeight + 'px';
+        }
+
+        resultCtx.clearRect(0, 0, displayWidth, displayHeight);
+
+        // Get current settings
+        const rotation = parseInt(rotateSelect.value) || 0;
+        const cropEnabled = cropCheckbox.checked;
+        const cropXVal = parseInt(cropX.value) || 0;
+        const cropYVal = parseInt(cropY.value) || 0;
+        const cropWVal = parseInt(cropW.value) || rawFeed.naturalWidth;
+        const cropHVal = parseInt(cropH.value) || rawFeed.naturalHeight;
+
+        // Save canvas state
+        resultCtx.save();
+
+        // Apply rotation if needed
+        if (rotation !== 0) {
+            resultCtx.translate(displayWidth / 2, displayHeight / 2);
+            resultCtx.rotate((rotation * Math.PI) / 180);
+            resultCtx.translate(-displayWidth / 2, -displayHeight / 2);
+        }
+
+        try {
+            // Draw the raw feed image with correct crop
+            if (cropEnabled) {
+                resultCtx.drawImage(
+                    rawFeed,
+                    cropXVal, cropYVal, cropWVal, cropHVal, // source crop in natural size
+                    0, 0, displayWidth, displayHeight      // destination: fill canvas
+                );
+            } else {
+                resultCtx.drawImage(rawFeed, 0, 0, displayWidth, displayHeight);
+            }
+        } catch (e) {
+            console.warn('Error drawing to canvas:', e);
+        }
+
+        resultCtx.restore();
+
+        // Draw entry/exit lines
+        drawLines();
+    }
+    
+    // Helper to draw an arrow
+    function drawArrow(ctx, fromX, fromY, toX, toY, color) {
+        const headlen = 18; // length of head in pixels
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const angle = Math.atan2(dy, dx);
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 7), toY - headlen * Math.sin(angle - Math.PI / 7));
+        ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 7), toY - headlen * Math.sin(angle + Math.PI / 7));
+        ctx.lineTo(toX, toY);
+        ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 7), toY - headlen * Math.sin(angle - Math.PI / 7));
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Draw entry and exit lines on the result canvas
+    function drawLines() {
+        if (!entryLineCheckbox || !exitLineCheckbox) return; // Safety check
+        
+        const canvasWidth = resultCanvas.width;
+        const canvasHeight = resultCanvas.height;
+
+        // Calculate scaling for lines
+        const frameWidth = parseInt(widthInput.value) || 640;
+        const frameHeight = parseInt(heightInput.value) || 480;
+        const scaleX = canvasWidth / frameWidth;
+        const scaleY = canvasHeight / frameHeight;
+
+        // Draw entry line (only if enabled)
+        if (entryLineCheckbox.checked) {
+            const entryPos = parseInt(entryLinePos.value) || 100;
+            const entryOrientation = entryLineOrientation.value;
+            const entryDir = entryLineDir.value;
+            if (entryOrientation === 'horizontal') {
+                const y = entryPos * scaleY;
+                resultCtx.strokeStyle = '#28a745';
+                resultCtx.lineWidth = 3;
+                resultCtx.beginPath();
+                resultCtx.moveTo(0, y);
+                resultCtx.lineTo(canvasWidth, y);
+                resultCtx.stroke();
+                // Draw arrow
+                let arrowX = canvasWidth / 2;
+                let arrowY = y;
+                let toX = arrowX, toY = arrowY;
+                if (entryDir === 'top') toY -= 40;
+                else if (entryDir === 'bottom') toY += 40;
+                else if (entryDir === 'left') toX += 40; // reversed
+                else if (entryDir === 'right') toX -= 40; // reversed
+                drawArrow(resultCtx, arrowX, arrowY, toX, toY, '#28a745');
+            } else {
+                const x = entryPos * scaleX;
+                resultCtx.strokeStyle = '#28a745';
+                resultCtx.lineWidth = 3;
+                resultCtx.beginPath();
+                resultCtx.moveTo(x, 0);
+                resultCtx.lineTo(x, canvasHeight);
+                resultCtx.stroke();
+                // Draw arrow
+                let arrowX = x;
+                let arrowY = canvasHeight / 2;
+                let toX = arrowX, toY = arrowY;
+                if (entryDir === 'top') toY -= 40;
+                else if (entryDir === 'bottom') toY += 40;
+                else if (entryDir === 'left') toX += 40; // reversed
+                else if (entryDir === 'right') toX -= 40; // reversed
+                drawArrow(resultCtx, arrowX, arrowY, toX, toY, '#28a745');
+            }
+        }
+
+        // Draw exit line (only if enabled)
+        if (exitLineCheckbox.checked) {
+            const exitPos = parseInt(exitLinePos.value) || 200;
+            const exitOrientation = exitLineOrientation.value;
+            const exitDir = exitLineDir.value;
+            if (exitOrientation === 'horizontal') {
+                const y = exitPos * scaleY;
+                resultCtx.strokeStyle = '#dc3545';
+                resultCtx.lineWidth = 3;
+                resultCtx.beginPath();
+                resultCtx.moveTo(0, y);
+                resultCtx.lineTo(canvasWidth, y);
+                resultCtx.stroke();
+                // Draw arrow
+                let arrowX = canvasWidth / 2;
+                let arrowY = y;
+                let toX = arrowX, toY = arrowY;
+                if (exitDir === 'top') toY -= 40;
+                else if (exitDir === 'bottom') toY += 40;
+                else if (exitDir === 'left') toX += 40; // reversed
+                else if (exitDir === 'right') toX -= 40; // reversed
+                drawArrow(resultCtx, arrowX, arrowY, toX, toY, '#dc3545');
+            } else {
+                const x = exitPos * scaleX;
+                resultCtx.strokeStyle = '#dc3545';
+                resultCtx.lineWidth = 3;
+                resultCtx.beginPath();
+                resultCtx.moveTo(x, 0);
+                resultCtx.lineTo(x, canvasHeight);
+                resultCtx.stroke();
+                // Draw arrow
+                let arrowX = x;
+                let arrowY = canvasHeight / 2;
+                let toX = arrowX, toY = arrowY;
+                if (exitDir === 'top') toY -= 40;
+                else if (exitDir === 'bottom') toY += 40;
+                else if (exitDir === 'left') toX += 40; // reversed
+                else if (exitDir === 'right') toX -= 40; // reversed
+                drawArrow(resultCtx, arrowX, arrowY, toX, toY, '#dc3545');
+            }
+        }
+    }
+    
+    // Update crop rectangle position and size
+    function updateCropRect() {
+        if (!cropCheckbox.checked) {
+            cropRect.style.display = 'none';
+            return;
+        }
+
+        const x = parseInt(cropX.value) || 0;
+        const y = parseInt(cropY.value) || 0;
+        const w = parseInt(cropW.value) || 200;
+        const h = parseInt(cropH.value) || 150;
+
+        // Get scaling factors
+        const frameWidth = parseInt(widthInput.value) || 640;
+        const frameHeight = parseInt(heightInput.value) || 480;
+        const displayWidth = rawFeed.offsetWidth;
+        const displayHeight = rawFeed.offsetHeight;
+        const scaleX = displayWidth / frameWidth;
+        const scaleY = displayHeight / frameHeight;
+
+        // Scale the crop rectangle to match the displayed image
+        const scaledX = x * scaleX;
+        const scaledY = y * scaleY;
+        const scaledW = w * scaleX;
+        const scaledH = h * scaleY;
+
+        cropRect.style.left = scaledX + 'px';
+        cropRect.style.top = scaledY + 'px';
+        cropRect.style.width = scaledW + 'px';
+        cropRect.style.height = scaledH + 'px';
+        cropRect.style.display = 'block';
+        cropRect.style.position = 'absolute';
+        cropRect.style.border = '2px solid #007bff';
+        cropRect.style.background = 'rgba(0,123,255,0.1)';
+        cropRect.style.cursor = 'move';
+        cropRect.style.zIndex = '5';
+
+        // Canvas updates automatically from the continuous loop
+    }
+
+    // Make crop rectangle draggable
+    function makeCropRectDraggable() {
+        let isDragging = false;
+        let startX, startY, startCropX, startCropY;
+
+        cropRect.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            isDragging = true;
+            
+            const rect = rawFeedContainer.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            startCropX = parseInt(cropX.value) || 0;
+            startCropY = parseInt(cropY.value) || 0;
+            
+            cropRect.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+
+            const rect = rawFeedContainer.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+            
+            // Get scaling factors
+            const frameWidth = parseInt(widthInput.value) || 640;
+            const frameHeight = parseInt(heightInput.value) || 480;
+            const displayWidth = rawFeed.offsetWidth;
+            const displayHeight = rawFeed.offsetHeight;
+            const scaleX = displayWidth / frameWidth;
+            const scaleY = displayHeight / frameHeight;
+            
+            // Convert delta to frame coordinates
+            const frameDeltaX = deltaX / scaleX;
+            const frameDeltaY = deltaY / scaleY;
+            
+            // Calculate new crop position
+            let newCropX = startCropX + frameDeltaX;
+            let newCropY = startCropY + frameDeltaY;
+            
+            // Constrain to frame boundaries
+            const cropWidth = parseInt(cropW.value) || 200;
+            const cropHeight = parseInt(cropH.value) || 150;
+            newCropX = Math.max(0, Math.min(newCropX, frameWidth - cropWidth));
+            newCropY = Math.max(0, Math.min(newCropY, frameHeight - cropHeight));
+            
+            // Update inputs
+            cropX.value = Math.round(newCropX);
+            cropY.value = Math.round(newCropY);
+            
+            // Update visual rectangle
+            updateCropRect();
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                cropRect.style.cursor = 'move';
+            }
+        });
+    }
+
+    // Update crop settings visibility
+    function updateCropSettings() {
+        if (!cropCheckbox || !cropControls) return;
+        
+        const isEnabled = cropCheckbox.checked;
+        
+        if (isEnabled) {
+            cropControls.style.display = 'block';
+            updateCropRect();
+        } else {
+            cropControls.style.display = 'none';
+            if (cropRect) {
+                cropRect.style.display = 'none';
+            }
+            // Canvas updates automatically from the continuous loop
+        }
+    }
+
+    // Update line visibility controls
+    function updateLineSettings() {
+        // Entry line
+        if (entryLineCheckbox.checked) {
+            entryLineControls.style.display = 'block';
+        } else {
+            entryLineControls.style.display = 'none';
+        }
+
+        // Exit line
+        if (exitLineCheckbox.checked) {
+            exitLineControls.style.display = 'block';
+        } else {
+            exitLineControls.style.display = 'none';
+        }
+    }
+
+    // Make lines draggable on the result canvas
+    function makeLinesDraggable() {
+        let isDragging = false;
+        let dragLine = null; // 'entry' or 'exit'
+        
+        resultCanvas.addEventListener('mousedown', function(e) {
+            if (!entryLineCheckbox.checked && !exitLineCheckbox.checked) return;
+            
+            const rect = resultCanvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Calculate scaling
+            const frameWidth = parseInt(widthInput.value) || 640;
+            const frameHeight = parseInt(heightInput.value) || 480;
+            const scaleX = resultCanvas.width / frameWidth;
+            const scaleY = resultCanvas.height / frameHeight;
+            
+            // Check if click is near entry line
+            if (entryLineCheckbox.checked) {
+                const entryPos = parseInt(entryLinePos.value) || 100;
+                const entryOrientation = entryLineOrientation.value;
+                
+                if (entryOrientation === 'horizontal') {
+                    const lineY = entryPos * scaleY;
+                    if (Math.abs(mouseY - lineY) < 10) {
+                        isDragging = true;
+                        dragLine = 'entry';
+                        resultCanvas.style.cursor = 'ns-resize';
+                        return;
+                    }
+                } else {
+                    const lineX = entryPos * scaleX;
+                    if (Math.abs(mouseX - lineX) < 10) {
+                        isDragging = true;
+                        dragLine = 'entry';
+                        resultCanvas.style.cursor = 'ew-resize';
+                        return;
+                    }
+                }
+            }
+            
+            // Check if click is near exit line
+            if (exitLineCheckbox.checked) {
+                const exitPos = parseInt(exitLinePos.value) || 200;
+                const exitOrientation = exitLineOrientation.value;
+                
+                if (exitOrientation === 'horizontal') {
+                    const lineY = exitPos * scaleY;
+                    if (Math.abs(mouseY - lineY) < 10) {
+                        isDragging = true;
+                        dragLine = 'exit';
+                        resultCanvas.style.cursor = 'ns-resize';
+                        return;
+                    }
+                } else {
+                    const lineX = exitPos * scaleX;
+                    if (Math.abs(mouseX - lineX) < 10) {
+                        isDragging = true;
+                        dragLine = 'exit';
+                        resultCanvas.style.cursor = 'ew-resize';
+                        return;
+                    }
+                }
+            }
+        });
+        
+        resultCanvas.addEventListener('mousemove', function(e) {
+            if (!isDragging) {
+                // Change cursor when hovering over lines
+                const rect = resultCanvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const frameWidth = parseInt(widthInput.value) || 640;
+                const frameHeight = parseInt(heightInput.value) || 480;
+                const scaleX = resultCanvas.width / frameWidth;
+                const scaleY = resultCanvas.height / frameHeight;
+                
+                let overLine = false;
+                
+                // Check entry line
+                if (entryLineCheckbox.checked) {
+                    const entryPos = parseInt(entryLinePos.value) || 100;
+                    const entryOrientation = entryLineOrientation.value;
+                    
+                    if (entryOrientation === 'horizontal') {
+                        const lineY = entryPos * scaleY;
+                        if (Math.abs(mouseY - lineY) < 10) {
+                            resultCanvas.style.cursor = 'ns-resize';
+                            overLine = true;
+                        }
+                    } else {
+                        const lineX = entryPos * scaleX;
+                        if (Math.abs(mouseX - lineX) < 10) {
+                            resultCanvas.style.cursor = 'ew-resize';
+                            overLine = true;
+                        }
+                    }
+                }
+                
+                // Check exit line
+                if (!overLine && exitLineCheckbox.checked) {
+                    const exitPos = parseInt(exitLinePos.value) || 200;
+                    const exitOrientation = exitLineOrientation.value;
+                    
+                    if (exitOrientation === 'horizontal') {
+                        const lineY = exitPos * scaleY;
+                        if (Math.abs(mouseY - lineY) < 10) {
+                            resultCanvas.style.cursor = 'ns-resize';
+                            overLine = true;
+                        }
+                    } else {
+                        const lineX = exitPos * scaleX;
+                        if (Math.abs(mouseX - lineX) < 10) {
+                            resultCanvas.style.cursor = 'ew-resize';
+                            overLine = true;
+                        }
+                    }
+                }
+                
+                if (!overLine) {
+                    resultCanvas.style.cursor = 'default';
+                }
+                return;
+            }
+            
+            // Handle dragging
+            const rect = resultCanvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const frameWidth = parseInt(widthInput.value) || 640;
+            const frameHeight = parseInt(heightInput.value) || 480;
+            const scaleX = resultCanvas.width / frameWidth;
+            const scaleY = resultCanvas.height / frameHeight;
+            
+            if (dragLine === 'entry') {
+                const entryOrientation = entryLineOrientation.value;
+                if (entryOrientation === 'horizontal') {
+                    const newPos = Math.max(0, Math.min(frameHeight, mouseY / scaleY));
+                    entryLinePos.value = Math.round(newPos);
+                } else {
+                    const newPos = Math.max(0, Math.min(frameWidth, mouseX / scaleX));
+                    entryLinePos.value = Math.round(newPos);
+                }
+            } else if (dragLine === 'exit') {
+                const exitOrientation = exitLineOrientation.value;
+                if (exitOrientation === 'horizontal') {
+                    const newPos = Math.max(0, Math.min(frameHeight, mouseY / scaleY));
+                    exitLinePos.value = Math.round(newPos);
+                } else {
+                    const newPos = Math.max(0, Math.min(frameWidth, mouseX / scaleX));
+                    exitLinePos.value = Math.round(newPos);
+                }
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                dragLine = null;
+                resultCanvas.style.cursor = 'default';
+            }
+        });
+    }
+
+    // Detection mode toggle functionality
+    const detectionModeRadios = document.querySelectorAll('input[name="detection_mode"]');
+    const lineDetectionConfig = document.getElementById('line-detection-config');
+    const cameraTypeConfig = document.getElementById('camera-type-config');
+    const lineModeTip = document.getElementById('line-mode-tip');
+    const cameraModeTip = document.getElementById('camera-mode-tip');
+    
+    function toggleDetectionMode() {
+        const selectedMode = document.querySelector('input[name="detection_mode"]:checked').value;
+        
+        if (selectedMode === 'line') {
+            lineDetectionConfig.style.display = 'grid';
+            cameraTypeConfig.style.display = 'none';
+            lineModeTip.style.display = 'inline';
+            cameraModeTip.style.display = 'none';
+        } else if (selectedMode === 'camera') {
+            lineDetectionConfig.style.display = 'none';
+            cameraTypeConfig.style.display = 'block';
+            lineModeTip.style.display = 'none';
+            cameraModeTip.style.display = 'inline';
+        }
+    }
+    
+    // Add event listeners to detection mode radio buttons
+    detectionModeRadios.forEach(radio => {
+        radio.addEventListener('change', toggleDetectionMode);
+    });
+    
+    // Event handlers for real-time updates
+    rawFeed.addEventListener('load', function() {
+        updateCropRect();
+    });
+
+    // Add event listeners for settings changes
+    if (cropCheckbox && cropControls) {
+        cropCheckbox.addEventListener('change', updateCropSettings);
+    }
+    if (cropX) cropX.addEventListener('input', updateCropRect);
+    if (cropY) cropY.addEventListener('input', updateCropRect);
+    if (cropW) cropW.addEventListener('input', updateCropRect);
+    if (cropH) cropH.addEventListener('input', updateCropRect);
+
+    if (widthInput) {
+        widthInput.addEventListener('input', function() {
+            updateCropRect();
+        });
+    }
+    if (heightInput) {
+        heightInput.addEventListener('input', function() {
+            updateCropRect();
+        });
+    }
+
+    // Add event listeners for line controls
+    if (entryLineCheckbox) {
+        entryLineCheckbox.addEventListener('change', updateLineSettings);
+    }
+    if (exitLineCheckbox) {
+        exitLineCheckbox.addEventListener('change', updateLineSettings);
+    }
+    
+    if (rotateSelect) {
+        rotateSelect.addEventListener('change', function() {
+            // Canvas updates automatically from the continuous loop
+        });
+    }
+
+    // Window resize handler
+    window.addEventListener('resize', function() {
+        setTimeout(() => {
+            updateCropRect();
+            // Canvas updates automatically from the continuous loop
+        }, 100);
+    });
+
+    // Initialize
+    updateCropSettings();
+    updateLineSettings();
+    if (cropRect && rawFeedContainer) {
+        makeCropRectDraggable();
+    }
+    if (resultCanvas) {
+        makeLinesDraggable();
+    }
+});
+</script>
+{% endblock %}
+</body>
+</html>
